@@ -2,16 +2,14 @@ package bigbank.dragonsOfMugloar;
 
 import bigbank.dragonsOfMugloar.controller.Controller;
 import bigbank.dragonsOfMugloar.dto.*;
+import bigbank.dragonsOfMugloar.utils.Helper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.ExitCodeGenerator;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationContext;
 import org.springframework.web.client.HttpClientErrorException;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 @SpringBootApplication
@@ -21,7 +19,7 @@ public class DragonsOfMugloarApplication implements CommandLineRunner {
     private ApplicationContext context;
 
     @Autowired
-    Controller controller;
+    private Controller controller;
 
     public static void main(String[] args) {
         SpringApplication.run(DragonsOfMugloarApplication.class, args);
@@ -81,24 +79,24 @@ public class DragonsOfMugloarApplication implements CommandLineRunner {
 
     private Message getAdToSolve(User user) throws HttpClientErrorException {
         List<Message> messages = controller.getMessages(user.getGameId());
-        List<Message> nonEncryptedMessages = getNonEncryptedMessages(messages);
-        return pickAdToSolve(nonEncryptedMessages);
+        List<Message> nonEncryptedMessages = Helper.getNonEncryptedMessages(messages);
+        return Helper.pickAdToSolve(nonEncryptedMessages);
     }
 
     private void solveAd(User user, Message messageToSolve) {
         BuyOrSolveResult result = controller.solveMessage(user.getGameId(), messageToSolve.getAdId());
 
         System.out.println(messageToSolve.getMessage() + " (id:" + messageToSolve.getAdId() + ") - " + result.getMessage());
-        updateUserStats(user, result);
+        Helper.updateUserStats(user, result);
         user.setLastTaskFailed(result.isSuccess());
     }
 
-    public void doShopping(User user) throws HttpClientErrorException {
+    private void doShopping(User user) throws HttpClientErrorException {
         if (user.getLives() == 1 || user.getGold() > 300) {  // collect gold a bit before buying, higher chance of buying high grade stuff, except when lives are low
 
             List<ShopItem> shopItems = controller.getListOfShopItems(user.getGameId());
             for (ShopItem shopItem : shopItems) {
-                boolean isAlreadyBought = user.getBoughtItems().stream().filter(item -> item.getId().equals(shopItem.getId())).findFirst().isPresent();
+                boolean isAlreadyBought = user.getBoughtItems().stream().anyMatch(item -> item.getId().equals(shopItem.getId()));
                 if (isAlreadyBought) {
                     continue;
                 }
@@ -117,52 +115,11 @@ public class DragonsOfMugloarApplication implements CommandLineRunner {
             System.out.println("Purchased - " + shopItem.getName());
             user.getBoughtItems().add(shopItem);
         }
-        updateUserStats(user, result);
+        Helper.updateUserStats(user, result);
     }
 
-    public void updateUserStats(User user, BuyOrSolveResult result) {
-        if (result.getLives() != null) {
-            user.setLives(result.getLives());
-        }
-        if (result.getGold() != null) {
-            user.setGold(result.getGold());
-        }
-        if (result.getLevel() != null) {
-            user.setLevel(result.getLevel());
-        }
-        if (result.getTurn() != null) {
-            user.setTurn(result.getTurn());
-        }
-        if (result.getScore() != null) {
-            user.setScore(result.getScore());
-        }
-        if (result.getHighScore() != null) {
-            user.setHighScore(result.getHighScore());
-        }
-    }
-
-
-    public Message pickAdToSolve(List<Message> messages) {
-        //no pain no gain
-        return messages
-                .stream()
-                .max(Comparator.comparing(v -> Integer.parseInt(v.getReward())))
-                .get();
-    }
-
-    public List<Message> getNonEncryptedMessages(List<Message> messages) {
-        List<Message> nonEncryptedMessages = new ArrayList<>();
-        for (Message message : messages) {
-            if (message.getEncrypted() == null) {
-                nonEncryptedMessages.add(message);
-            }
-        }
-        return nonEncryptedMessages;
-    }
-
-    public void shutdownApp() {
-
-        int exitCode = SpringApplication.exit(context, (ExitCodeGenerator) () -> 0);
+    private void shutdownApp() {
+        int exitCode = SpringApplication.exit(context, () -> 0);
         System.exit(exitCode);
     }
 }
